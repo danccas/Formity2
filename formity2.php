@@ -1,6 +1,4 @@
 <?php
-/*
-*/
 class Formity {
   public static $INPUT_USERNAME = 'username';
   public static $INPUT_PASSWORD = 'password';
@@ -12,16 +10,20 @@ class Formity {
 
   public static function getInstance($cdr = null) {
     if(!is_null($cdr) && !array_key_exists($cdr, static::$instances)) {
-      return static::$instances[$cdr] = new static($cdr);
-    }
-    if(is_null($cdr)) {
+      $rp = static::$instances[$cdr] = new static($cdr);
+    } elseif(is_null($cdr)) {
       if(empty(static::$instances)) {
         trigger_error('Sin instancias');
       } else {
-        return reset(static::$instances);
+        $rp = reset(static::$instances);
       }
+    } else {
+      $rp = static::$instances[$cdr];
     }
-    return static::$instances[$cdr];
+    if(class_exists('Popy')) {
+      Popy::getInstance()->currentFormity = $rp;
+    }
+    return $rp;
   }
   public static function exists($cdr) {
     return array_key_exists($cdr, static::$instances);
@@ -51,7 +53,8 @@ class Formity {
   public $title = null;
   public $description = null;
   public $url = null;
-  public $button = 'Guardar';
+  public $buttons = array('Guardar');
+  private $byButton = null;
   public $is_ajax = false;
   public $ajax_response = array();
   private $isSession = null;
@@ -81,6 +84,9 @@ class Formity {
     return substr(md5($st), 0, 4);
 //    return substr(dechex(intval($st, 36)), -5);
   }
+  public function getButton() {
+    return strtolower($this->byButton);
+  }
   public function setTitle($t) {
     $this->title = $t;
   }
@@ -96,7 +102,13 @@ class Formity {
     return $this;
   }
   function setError($e) {
-    $this->error[] = $e;
+    if(is_array($e)) {
+      foreach($e as $v) {
+        $this->error[] = $v;
+      }
+    } else {
+      $this->error[] = $e;
+    }
     $this->is_valid = false;
     return $this;
   }
@@ -116,6 +128,7 @@ class Formity {
         if(empty($this->uniqueId) || (!empty($this->uniqueId) && isset($_REQUEST[$this->nToken . 'id']) &&$_REQUEST[$this->nToken . 'id'] == $this->uniqueId)) {
 #        echo "console.log('caso2', " . json_encode($_REQUEST) . ");";
           $data = Formity::RequestToValues($this, $_REQUEST);
+          $this->byButton = $_REQUEST['formity_button'];
 #        echo "console.log('caso3', " . json_encode($data) . ");";
 #        echo "<pre>REQUEST->";print_r($data);echo "</pre>";
         #        echo "<pre>REQUEST->";print_r($data);echo "</pre>";
@@ -364,13 +377,17 @@ class Formity {
     }, $fields);
   }
   function buildHeader($method = 'POST', $url = null, $attrs = null) {
+    $attrs['id'] = $this->id;
     $attrs['data-id'] = $this->id;
     if(!empty($this->url)) {
       $attrs['action'] = $this->url;
+    } elseif(!ES_POPY) {
+      $attrs['action'] = '#' . $this->id;
     }
-    if(!empty($url)) {
-      $attrs['action'] = $url;
-    }
+//    if(!empty($url)) {
+//      $attrs['action'] = $url;
+//    } else {
+//    }
     if(!empty($this->file)) {
       $attrs['enctype'] = 'multipart/form-data';
     }
@@ -397,33 +414,50 @@ class Formity {
     $html .= '</form>';
     return $html;
   }
+  function buildButtons() {
+    $html = $this->message;
+    foreach($this->buttons as $b) {
+      $html .= '<input type="submit" name="formity_button" value="' . $b . '" class="button is-primary">';
+    }
+    return $html;
+  }
   private static function _renderFormity($form, $nivel = 0) {
     $rp = '';
     $par = $nivel % 2 === 0;
     if($nivel == 0) {
       $rp .= $form->buildHeader();
-      if(ES_POPY) {
+      /* if(ES_POPY) {
         $rp .= '<div style="margin-top: 15px;text-align: right;font-size: 12px;">';
         $rp .= $form->message;
         $rp .= '<button class="button" type="submit">' . $form->button . '</button>';
         $rp .= '</div>';
-      }
+      } */
     }
     if(!empty($form->error)) {
-      $rp .= "<div style='background:#ffd2d2;border: 1px solid red;margin-bottom: 10px;color: #232323;'><ul>";
+      $rp .= '<article class="message is-danger"><div class="message-header">Debes seguir estas indicaciones:</div>';
+      $rp .= '<div class="message-body"><div class="content">';
+      $rp .= '<ul style="margin-top:0px;">';
       foreach($form->error as $e) {
         $rp .= "<li>" . $e . "</li>\n";
       }
-      $rp .= "</ul></div>";
+      $rp .= "</ul></div></div></article>";
     }
-    $rp .= '<table class="style001">';
+    $rp .= '<div style="padding: 25px 10px;">';
+#    $rp .= '<div class="columns is-multiline">';
     foreach($form->getFields() as $key => $field) {
-      $rp .= '<tr>';
       if(!$field->isForm()) {
-        $rp .= "<th>" . $field->name . ":</th>\n";
-        $rp .= "<td>" . $field->render() . "\n";
-        $rp .= "</td>\n";
+        if($field->extra == 'hidden') {
+          $rp .= '<div style="display:none;">';
+          $rp .= $field->render();
+        } else {
+#          $rp .= '<div class="column is-' . $field->size . '">';
+          $rp .= '<div class="field is-horizontal">';
+          $rp .= '<div class="field-label is-normal"><label class="label">' . $field->name . '</label></div>';
+          $rp .= '<div class="field-body"><div class="field"><div class="control">' . $field->render() . '</div></div></div>';
+        }
       } else {
+#        $rp .= '<div class="column is-' . $field->size . '">';
+        $rp .= '<div class="field is-horizontal">';
         if($field->isForm()) {
           $rp .= '<th colspan="2" style="height: 35px;">';
           $rp .= $field->name;
@@ -438,14 +472,14 @@ class Formity {
             $rp .= '<tr>';
             $rp .= '<th rowspan="2" class="indice">' . ($k + 1) . '</th>';
             foreach($f->getFields() as $_k => $_f) {
-              if(!$_f->isForm()) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
                 $rp .= "<th>" . $_f->name . "</th>";
               }
             }
             $rp .= '</tr>';
             $rp .= '<tr>';
             foreach($f->getFields() as $_k => $_f) {
-              if(!$_f->isForm()) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
                 $rp .= "<td>" . $_f->render() . "</td>";
               }
             }
@@ -458,14 +492,14 @@ class Formity {
            $rp .= '<tr>';
             $rp .= '<th rowspan="2" class="indice">#</th>';
             foreach($field->childstruct->getFields() as $_k => $_f) {
-              if(!$_f->isForm()) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
                 $rp .= "<th>" . $_f->name . "</th>";
               }
             }
             $rp .= '</tr>';
             $rp .= '<tr>';
             foreach($field->childstruct->getFields() as $_k => $_f) {
-              if(!$_f->isForm()) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
                 $rp .= "<td>" . $_f->render() . "</td>";
               }
             }
@@ -479,16 +513,17 @@ class Formity {
           $rp .= '</td></tr>';
         }
       }
-      $rp .= '</tr>';
+#      $rp .= '</div>';
+      $rp .= '</div>';
     }
-    $rp .= '</table>';
     if($nivel == 0) {
-      $rp .= '<div style="margin-top: 15px;text-align: right;font-size: 12px;">';
-      $rp .= $form->message;
-      $rp .= '<button class="button" type="submit">' . $form->button . '</button>';
+      $rp .= '<div class="column is-12" style="margin-top: 15px;text-align: right;font-size: 12px;">';
+      $rp .= $form->buildButtons();
       $rp .= '</div>';
       $rp .= $form->buildFooter();
     }
+    $rp .= '</div>';
+#    $rp .= '</div>';
     return $rp;
   }
   function renderFormity() {
@@ -516,7 +551,7 @@ class Formity {
     return $rp;
   }
   function renderInPage() {
-      require_once(ABS_PLANTILLAS . 'cabecera.php');
+      require_once(ABS_PLANTILLAS . 'cabecera_cpanel.php');
       echo '<div class="contenedor_generico contenedor_cuerpo_principal">';
       if(!empty(Theme::data('submenu'))) {
         echo '<div class="struct_site_body_menu">';
@@ -534,11 +569,11 @@ class Formity {
     }
     //echo mostrar_submenu($SUBMENU);
     echo Route::renderErrors();
-    echo '<div>';
+    echo '<div class="card">';
     echo static::_renderFormity($this);
     echo '</div>';
     echo '</div>';
-    require_once(ABS_PLANTILLAS . 'pie.php');
+    require_once(ABS_PLANTILLAS . 'pie_cpanel.php');
   }
 }
 class FormityField {
@@ -552,6 +587,7 @@ class FormityField {
   public $disabled   = false;
   public $type  = null;
   public $extra = null;
+  public $size = 12;
   private $length_min = 0;
   private $length_step = '0.01';
   private $length_max = 100;
@@ -633,13 +669,19 @@ class FormityField {
 #      $this->type = 'text';
 #      $this->extra = 'autocomplete';
 
+    } elseif($this->extra == 'autocomplete') {
+      Theme::JS('/libs/js/jquery-ui.min.js');
+      Theme::CSS('/libs/css/jquery-ui.min.css');
+
     } elseif($this->type == 'tree') {
       Theme::JS('/libs/js/formity.tree.js');
+      Theme::CSS('/libs/css/formity.tree.css');
       require_once(ABS_LIBRERIAS . 'formity.tree.php');
 
     } elseif($this->type == 'word') {
       Theme::JS('/libs/js/trumbowyg.min.js');
       Theme::JS('/libs/js/trumbowyg.table.js');
+      #Theme::JS('/libs/js/trumbowyg.pasteembed.js');
       Theme::CSS('/libs/css/trumbowyg.min.css');
       Theme::CSS('/libs/css/trumbowyg.table.css');
     }
@@ -698,6 +740,10 @@ class FormityField {
       return $r;
     }, $this->children);
   } 
+  function setSize($n) {
+    $this->size = $n;
+    return $this;
+  }
   function setMin($n) {
     $this->length_min = $n;
     return $this;
@@ -1054,14 +1100,23 @@ class FormityField {
       $attrs['data-disables'] = 'formity';
       $attrs['disabled'] = 'true'; //TODO
     }
-    if(!is_null($this->length_min)) {
-      $attrs['min'] = $this->length_min;
-    }
-    if(!is_null($this->length_step)) {
-      $attrs['step'] = $this->length_step;
-    }
-    if(!is_null($this->length_max)) {
-      $attrs['max'] = $this->length_max;
+    if(in_array($this->extra, array('number','int'))) {
+      if(!is_null($this->length_min)) {
+        $attrs['min'] = $this->length_min;
+      }
+      if(!is_null($this->length_step)) {
+        $attrs['step'] = $this->length_step;
+      }
+      if(!is_null($this->length_max)) {
+        $attrs['max'] = $this->length_max;
+      }
+    } elseif(in_array($this->extra, array('text','textarea'))) {
+      if(!is_null($this->length_min)) {
+        $attrs['minlength'] = $this->length_min;
+      }
+      if(!is_null($this->length_max)) {
+        $attrs['maxlength'] = $this->length_max;
+      }
     }
     if($this->on_change) {
       $attrs['data-on-change'] = 'true';
@@ -1074,7 +1129,10 @@ class FormityField {
       $val = $this->value;
       $this->value = '';
       $attrs['multiple'] = '';
+    } elseif($this->type == 'multimedia') {
+      $class[] = 'input';
     }
+    $class[] = $this->type;
     # elseif($this->extra == 'autocomplete') {
     #   $attrs['data-autocomplete'] = 'true';
     # }
@@ -1114,6 +1172,7 @@ class FormityField {
       $h .= "data: new FormData($(\"[data-id='" . $this->mform->id . "']\")[0]), contentType: false, processData: false, success: response, dataType: 'json' }); }, minLength: 2, ";
       $h .= "select: function( event, ui ) {\n";
       $h .= "event.preventDefault();\n";
+      $h .= "if(typeof ui.item.label !== 'undefined') { $('#ip_" . $this->getNameRequest() . "').val(ui.item.label); }\n";
       $h .= "$('#val_" . $this->getNameRequest() . "').val(ui.item.id);\n";
 #      $h .= "$(\"[name='" . $this->getNameRequest() . "']\").val(ui.item.id);\n";
       $h .= "console.log( \"Selected: \", ui.item);";
@@ -1156,13 +1215,15 @@ class FormityField {
       $h .= '<textarea id="wysiwyg_' . $keyw . '" name="' . $keyw . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '">' . htmlentities($this->value) . '</textarea>';
       $h .= "<script>$('#wysiwyg_" . $keyw . "').trumbowyg({ closable: true, ";
       $h .= 'btns:[["viewHTML"],["undo","redo"],["formatting"],["strong","em","del"],["superscript","subscript"],["link"],["insertImage"],["justifyLeft","justifyCenter","justifyRight","justifyFull"],["unorderedList","orderedList"],["horizontalRule"],["removeformat"],["fullscreen"],["table"]],';
-      $h .= "plugins: { table: { } } });</script>";
+      $h .= "plugins: { table: { } } }); $('#wysiwyg_" . $keyw . "').on('tbwchange', (e) => { $(e.target).change(); })</script>";
       $h .= '</div>';
 
     } elseif($this->type == 'select') {
+      $h .= '<div class="select is-fullwidth">';
       $h .= '<select name="' . $keyw . '" ' . $attrs . ' data-value="' . $this->value . '" data-name="' . $this->name . '">';
       $h .= FormityField::buildSelect($this->options, $this->value);
-      $h .='</select>';
+      $h .= '</select>';
+      $h .= '</div>';
 
     } elseif($this->type == 'checkbox') {
       $h .= '<ul>';
@@ -1191,10 +1252,11 @@ class FormityField {
 
     } elseif($this->type == 'multimedia') {
       $u = time() . rand();
-      $h .= '<input id="' . $u . '" type="text" name="' . $keyw . '" value="' . $this->value . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '" onclick="selectMultimedia($(this), \'codigo\');" />';
-      if(!empty($this->value)) {
-        $h .= '<img src="' . HOSTIMG_IMAGENES . $this->value . '" style="width:100px;" />';
-      }
+      $h .= '<input id="' . $u . '" type="hidden" name="' . $keyw . '" value="' . $this->value . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '" />';
+      $h .= '<div class="columns" style="display: flex;flex-wrap: wrap;align-content: center;align-items: center;text-align: center;">';
+      $h .= '<div class="column"><button class="button" data-id="' . $u . '" onclick="selectMultimedia($(this), \'codigo\');" style="margin: 0 auto;">Buscar o Subir</button></div>';
+      $h .= '<div class="column"><img id="tb' . $u . '" ' . (!empty($this->value) ? 'src="' . HOSTIMG_IMAGENES . $this->value . '"': '') . ' style="max-width:100px;max-height:100px;" /></div>';
+      $h .= '</div>';
 
     } elseif($this->type == 'tree') {
       $u = time() . rand();
@@ -1226,7 +1288,7 @@ EOF;
     } else {
       $h .= '<!-- Error: ' . $this->type . ':' . $this->extra . ':' . $extra . ' -->';
     }
-    $h .= '<div data-fnn-message>' . implode(',', $this->error) . '</div>';
+    $h .= '<p class="help is-danger" data-fnn-message>' . implode(',', $this->error) . '</p>';
     return $h;
   }
   static function buildSelect($op, $selected = null) {
