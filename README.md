@@ -16,4 +16,15 @@ $form->addField('nombre', 'input:text');
 
 ```
 
+#Renderizar formulario
+
+```php
+
+$form = Formity::getInstance('formulario_prueba');
+Theme::render($form);
+
+
+```
+
+
 
