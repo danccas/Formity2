@@ -11,7 +11,8 @@ Route::library('formity2.php');
 ```php
 
 $form = Formity::getInstance('formulario_prueba');
-$form->addField('fecha', 'input:date');$form->addField('nombre', 'input:text');
+$form->addField('fecha', 'input:date');
+$form->addField('nombre', 'input:text');
 
 ```
 
