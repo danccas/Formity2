@@ -1,11 +1,11 @@
-#Declarar Libreria
+# Declarar Libreria
 
 ```php
 
 Route::library('formity2.php');
 
 ```
-#Declarar un formulario simple
+# Declarar un formulario simple
 
 
 ```php
@@ -16,12 +16,12 @@ $form->addField('nombre', 'input:text');
 
 ```
 
-#Renderizar formulario
+# Renderizar formulario
 
 ```php
 
 $form = Formity::getInstance('formulario_prueba');
-Theme::render($form);
+$form->renderInPage()
 
 
 ```
