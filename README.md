@@ -26,5 +26,22 @@ $form->renderInPage()
 
 ```
 
+# Capturar Datos de un formulario
+
+```php
+
+    $formity2 = Formity::getInstance('formulario_prueba');
+    
+    if($form->byRequest()) {
+      if(!$re->isValid($err)) {
+        //hacer algo si hay error
+      } else {
+      	//capturando datos
+        $data = $re->getData();
+
+      }
+    }
+
+```
 
 
