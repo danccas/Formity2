@@ -17,7 +17,7 @@ $form->addField('nombre', 'input:text');
 ```
 # Declarar campo no obligatorio
 
-para declarar un campo obligatorio añadir "?"
+para declarar un campo obligatorio añadir "?",
 por defecto es obligatorio un campo
 
 
