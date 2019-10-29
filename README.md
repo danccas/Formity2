@@ -15,6 +15,23 @@ $form->addField('fecha', 'input:date');
 $form->addField('nombre', 'input:text');
 
 ```
+# Declarar campo no obligatorio
+
+para declarar un campo obligatorio añadir "?"
+por defecto es obligatorio un campo
+
+
+```php
+//campo obligatorio
+$form->addField('fecha', 'input:date');
+
+//campo no obligatorio
+$form->addField('fecha?', 'input:date');
+
+```
+
+
+
 
 # Renderizar formulario
 
