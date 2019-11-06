@@ -61,4 +61,44 @@ $form->renderInPage()
 
 ```
 
+# Renderizar por separado un Formulario en una plantilla
+
+```php
+
+    $formity2 = Formity::getInstance('formulario_prueba');
+
+```
+
+# Campo autompletar
+  declaracion
+```php
+
+  $form->addField('nombre_campo:nombre_campoamostrar', 'input:autocomplete')->setSize(6)->setOptions(function($form, $field, $q) use($db) {
+  $q = str_replace('"', '', strtolower(trim($q)));
+  $q = str_replace("'", '', $q);
+  $rp = Libs::buscar_personal_en_empresa($db, Identify::g()->empresa_id, $q); //esta funcion debes cambiar segun lo que necesites
+  if(!empty($rp)) {
+    $rp = array_map(function($n) {
+      //valores a mostrar en el label
+      return array(
+        'id'    => $n['id'],
+        'label' => implode(' ', array($n['nombres'], $n['apellido_paterno'], $n['apellido_materno'])),
+      );
+    }, $rp);
+  }
+  return $rp;
+});
+
+
+```
+el autocompletar al ser un campo con dos valores uno con el dato del id y el otro con el dato
+que deseas mostrar , necesitaras la funcion para mostrar lo que se debe ver
+```php
+ 
+$form->getField('contacto_id')->setLabel("texto a mostrar");
+
+
+```
+
+
 
