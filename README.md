@@ -63,9 +63,27 @@ $form->renderInPage()
 
 # Renderizar por separado un Formulario en una plantilla
 
-```php
+```php 
 
-    $formity2 = Formity::getInstance('formulario_prueba');
+<?php
+$form=Formity::getInstance('nombre_formulario_a_renderizar');
+echo $form->buildHeader();?>
+
+<div>
+  <div>
+   <?php echo $form->getField('nombre_campo1')->render(); ?> 
+  </div>
+  <div>
+   <?php echo $form->getField('nombre_campo2')->render(); ?> 
+  </div>
+
+
+</div>
+
+
+<?php  echo $form->buildFooter()?>
+
+
 
 ```
 
