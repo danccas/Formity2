@@ -2,7 +2,7 @@
 
 ```php
 
-Route::library('formity2.php');
+require_once('formity2.php');
 
 ```
 # Declarar un formulario simple
