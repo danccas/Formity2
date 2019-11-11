@@ -118,5 +118,18 @@ $form->getField('contacto_id')->setLabel("texto a mostrar");
 
 ```
 
+#  Creando Sub_Formularios
+declaracion
+```php
+  $form = Formity::getInstance('formualrio_prueba');
+
+     $form_hijo = Formity::getInstance('formulario_hijo');
+     $form_hijo->addField('campo', 'input:text');
+
+  $form->addField('formulario_padre', $form_hijo, '1-12');
+  
+```
+
+
 
 
