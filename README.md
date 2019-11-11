@@ -130,6 +130,22 @@ declaracion
   
 ```
 
+#validacion manual 
+por defecto el formity2 tiene  la funcion isvalid() 
+para validar campos pero para validaciones extras
+se puede usar ->setError()
+ejemplo:
+```php
+if($re->byRequest()) {
+         if($re->isValid($err)) {
+           if("hay un error") {
+           $re->setError('Ingreso zonas iguales');
+          }
 
+         }
+
+      } 
+
+```
 
 
