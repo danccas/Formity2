@@ -149,3 +149,27 @@ if($re->byRequest()) {
 ```
 
 
+# Metodo onChange()
+Esta funcion sirve para poder hacer un cambio desde un elemento a otro  elemento
+del mismo formulario 
+```php
+//declarar primero el formulario con todos sus elementos
+$form = Formity::getInstance('formulario_onchange');
+$form->addField('campo1', 'input:text');
+$form->addField('campo2','textarea');
+
+//luego llamar al elemento que generara el onChange
+$form->getField('nombre')->onChange(function($form , $field){
+  //puedes capturar los datos del formulario si lo requieres
+  $data = $form->getData();
+  //d esta manera puedes mostrar en otro elemnto del formulario
+  $form->getField('campo2')->setValue("ESTA PLACA ESTA REGISTRADA EN OTRA EMPRESA");
+  return ;
+
+});
+
+
+```
+
+
+
