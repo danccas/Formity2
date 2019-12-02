@@ -50,12 +50,8 @@ $form->renderInPage()
     $formity2 = Formity::getInstance('formulario_prueba');
     
     if($form->byRequest()) {
-      if(!$form->isValid($err)) {
-        //hacer algo si hay error
-      } else {
-      	//capturando datos
-        $data = $form->getData();
-
+      if($form->isValid($err)) {
+          $data = $form->getData();
       }
     }
 
