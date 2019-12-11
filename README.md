@@ -30,7 +30,16 @@ $form->addField('fecha?', 'input:date');
 
 ```
 
+# Declarar Campo con sub Campos
+```php
+$form = Formity::getInstance('formulario_prueba');
+  $pform = Formity::getInstance('deuda');
+  $pform->addField('id?', 'input:hidden');
+  $pform->addField('fecha_vencimiento', 'input:date')->setValue(date('Y-m-d'));
+  $pform->addField('monto', 'input:number')->setMax(99999);
+$form->addField('deudas', $pform, '1-12');
 
+```
 
 
 # Renderizar formulario
