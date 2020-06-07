@@ -5,37 +5,43 @@ class Formity {
   public static $INPUT_EMAIL = 'email';
   public static $INPUT_DOMAIN = 'domain';
 
-  private static $instances = array();
+  private static $instances = null;
   private $nToken = '_token';
 
+  public static function importRoute($route) {
+    if(static::$instances === null) {
+      static::$instances = new stdClass();
+    }
+    return static::$instances;
+  }
+  public static function g($cdr = null) {
+    return static::getInstance($cdr);
+  }
   public static function getInstance($cdr = null) {
-    if(!is_null($cdr) && !array_key_exists($cdr, static::$instances)) {
-      $rp = static::$instances[$cdr] = new static($cdr);
+    if(static::$instances === null) {
+      static::$instances = new stdClass();
+    }
+    if(!is_null($cdr) && !property_exists(static::$instances, $cdr)) {
+      $rp = static::$instances->$cdr = new static($cdr);
     } elseif(is_null($cdr)) {
-      if(empty(static::$instances)) {
-        trigger_error('Sin instancias');
-      } else {
-        $rp = reset(static::$instances);
-      }
+       trigger_error('DSN no existe: ' . $cdr);
     } else {
-      $rp = static::$instances[$cdr];
+      $rp = static::$instances->$cdr;
     }
     if(class_exists('Popy')) {
       Popy::getInstance()->currentFormity = $rp;
     }
+    #Route::JS('/js/formity.js', 'formity');
     return $rp;
-  }
-  public static function exists($cdr) {
-    return array_key_exists($cdr, static::$instances);
   }
   public static function init($cdr = null) {
     $cdr = is_null($cdr) ? count(static::$instances) : $cdr;
     return Formity::getInstance($cdr);
   }
   public static function delete($cdr) {
-    static::$instances[$cdr]->fields = array();
-    static::$instances[$cdr] = null;
-    unset(static::$instances[$cdr]);
+    static::$instances->$cdr->fields = array();
+    static::$instances->$cdr = null;
+    unset(static::$instances->$cdr);
   }
   public $uniqueId = null;
   public $id = null;
@@ -58,6 +64,7 @@ class Formity {
   public $is_ajax = false;
   public $ajax_response = array();
   private $isSession = null;
+  public $obfuscate = true;
 
   function getClone($i = null) {
     $cl = clone $this;
@@ -75,6 +82,10 @@ class Formity {
     $this->token = date('z');//Formity::hash($cdr);
     $this->nToken = Formity::hash($cdr);
     $this->isSession = 'sess_' . $cdr;
+  }
+  public function setSecurity($x) {
+    $this->obfuscate = $x;
+    return $this;
   }
   public function setUniqueId($x) {
     $this->uniqueId = $x;
@@ -105,9 +116,11 @@ class Formity {
     if(is_array($e)) {
       foreach($e as $v) {
         $this->error[] = $v;
+        Route::setError($v);
       }
     } else {
       $this->error[] = $e;
+      Route::setError($e);
     }
     $this->is_valid = false;
     return $this;
@@ -123,18 +136,18 @@ class Formity {
       $this->method = $method;
     }
     if($_SERVER['REQUEST_METHOD'] == $this->method) {
-#      echo "console.log('caso1');";
-      if(isset($_REQUEST[$this->nToken]) && $_REQUEST[$this->nToken] == $this->token) {
+      if(!$this->obfuscate) {
+        $data = Formity::RequestToValues($this, $_REQUEST);
+        $this->byButton = $_REQUEST['fmt_bn'];
+        Formity::myform_set_values($this, $data, false, 0, false);
+        $this->is_valid = empty($this->error);
+        return true;
+
+      } elseif(isset($_REQUEST[$this->nToken]) && $_REQUEST[$this->nToken] == $this->token) {
         if(empty($this->uniqueId) || (!empty($this->uniqueId) && isset($_REQUEST[$this->nToken . 'id']) &&$_REQUEST[$this->nToken . 'id'] == $this->uniqueId)) {
-#        echo "console.log('caso2', " . json_encode($_REQUEST) . ");";
           $data = Formity::RequestToValues($this, $_REQUEST);
-          $this->byButton = $_REQUEST['formity_button'];
-#        echo "console.log('caso3', " . json_encode($data) . ");";
-#        echo "<pre>REQUEST->";print_r($data);echo "</pre>";
-        #        echo "<pre>REQUEST->";print_r($data);echo "</pre>";
+          $this->byButton = $_REQUEST['fmt_bn'];
           Formity::myform_set_values($this, $data, false, 0, false);
-#        echo "<pre>setVALUES->";print_r($data);echo "</pre>";
-#        echo "console.log('caso4', " . json_encode($this->error) . ");";
           $this->is_valid = empty($this->error);
           return true;
         }
@@ -228,6 +241,7 @@ class Formity {
   }
   function isValid(&$error = null) {
     $error = $this->error;
+    Route::setError($error);
     return $this->is_valid;
   }
   function addField($key, $type = 'input:text', $analyze = null) {
@@ -388,7 +402,7 @@ class Formity {
   function buildHeader($method = 'POST', $url = null, $attrs = null) {
     $attrs['id'] = $this->id;
     $attrs['data-id'] = $this->id;
-    $attrs['data-base'] = Route::link(null, null, null, '');
+    $attrs['data-base'] = Route::uri(null, null, null, '');
     if(!empty($this->url)) {
       $attrs['action'] = $this->url;
     } elseif(!ES_POPY) {
@@ -426,8 +440,10 @@ class Formity {
   }
   function buildButtons() {
     $html = $this->message;
-    foreach($this->buttons as $b) {
-      $html .= '<input type="submit" name="formity_button" value="' . $b . '" class="button is-primary">';
+    foreach($this->buttons as $k => $b) {
+      $html .= '<button type="submit" name="fmt_bn" value="' . $k . '" class="button">';
+      $html .= $b;
+      $html .= '</button>';
     }
     return $html;
   }
@@ -445,8 +461,7 @@ class Formity {
     }
     if(!empty($form->error)) {
       $rp .= '<article class="message is-danger"><div class="message-header">Debes seguir estas indicaciones:</div>';
-      $rp .= '<div class="message-body"><div class="content">';
-      $rp .= '<ul style="margin-top:0px;">';
+      $rp .= '<div class="message-body"><div class="content"><ul style="margin-top:0px;">';
       foreach($form->error as $e) {
         $rp .= "<li>" . $e . "</li>\n";
       }
@@ -458,83 +473,26 @@ class Formity {
       if(!$field->isForm()) {
         if($field->extra == 'hidden') {
           $rp .= '<div style="display:none;">';
-          $rp .= $field->render();
+          $rp .= $field->render() . "\n";
         } else {
 #          $rp .= '<div class="column is-' . $field->size . '">';
-          $rp .= '<div class="field is-horizontal">';
-          $rp .= '<div class="field-label is-normal"><label class="label">' . $field->name . '</label></div>';
-          $rp .= '<div class="field-body"><div class="field"><div class="control">' . $field->render() . '</div></div></div>';
+          $rp .= '<div class="field">';
+          $rp .= '<label class="label">' . $field->name . "</label>\n";
+          $rp .= '<div class="control">';
+          $rp .= $field->render() . "\n";
+          $rp .= '</div>';
         }
       } else {
 #        $rp .= '<div class="column is-' . $field->size . '">';
-        $rp .= '<div class="field is-horizontal">';
+        $rp .= '<div class="field">';
         if($field->isForm()) {
-          $rp .= '<div class="field-label is-normal"><label class="label">' . $field->name . '</label>';
+          $rp .= '<label class="label">' . $field->name . "</label>\n<div>";
           if($field->childrangchange) {
             #$rp .= '<span id="addMore" style="float: right;margin: 0 25px;font-size: 11px;cursor:pointer;">[NUEVO ELEMENTO]</span>';
-            $rp .= '<a class="button is-small is-rounded" id="addMore"><span class="icon"><i class="fa fa-plus fa-1x"></i></span></a>';
+            $rp .= '<a class="button is-small is-rounded" id="addMore_' . $field->getNameRequest() . '"><i class="material-icons">add</i></a>';
           }
           $rp .= '</div>';
-          $rp .= '<div class="field-body">';
-          $rp .= '<table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth" id="contenedorMore" data-id="' . $field->getNameRequest() . '">';
-          foreach($field->getChildren() as $k => $f) {
-            $rp .= '<tbody class="joinMore">';
-            $rp .= '<tr>';
-            $rp .= '<th rowspan="2" class="indice has-text-centered">';
-            $rp .= '<span class="key">' . ($k + 1) . '</span>';
-            foreach($f->getFields() as $_k => $_f) {
-              if(!$_f->isForm() && $_f->extra == 'hidden') {
-                $rp .= "<div style='display:none;'>" . $_f->render() . "</div>";
-              }
-            }
-            $rp .= '</th>';
-            foreach($f->getFields() as $_k => $_f) {
-              if(!$_f->isForm() && $_f->extra != 'hidden') {
-                $rp .= "<th>" . $_f->name . "</th>";
-              }
-            }
-            $rp .= '</tr>';
-            $rp .= '<tr>';
-            foreach($f->getFields() as $_k => $_f) {
-              if(!$_f->isForm() && $_f->extra != 'hidden') {
-                $rp .= "<td>" . $_f->render() . "</td>";
-              }
-            }
-            $rp .= '</tr>';
-            $rp .= '</tbody>';
-            #$rp .= static::_renderFormity($f, $nivel + 1);
-          }
-          if($field->childrangchange) {
-            $rp .= '<tbody class="hide" id="clonar">';
-            $rp .= '<tr>';
-            $rp .= '<th rowspan="2" class="indice has-text-centered">';
-            $rp .= '<span class="key">' . ($k + 1) . '</span>';
-            foreach($field->childstruct->getFields() as $_k => $_f) {
-              if(!$_f->isForm() && $_f->extra == 'hidden') {
-                $rp .= "<div style='display:none;'>" . $_f->render() . "</div>";
-              }
-            }
-            $rp .= '</th>';
-            foreach($field->childstruct->getFields() as $_k => $_f) {
-              if(!$_f->isForm() && $_f->extra != 'hidden') {
-                $rp .= "<th>" . $_f->name . "</th>";
-              }
-            }
-            $rp .= '</tr>';
-            $rp .= '<tr>';
-            foreach($field->childstruct->getFields() as $_k => $_f) {
-              if(!$_f->isForm() && $_f->extra != 'hidden') {
-                $rp .= "<td>" . $_f->render() . "</td>";
-              }
-            }
-            $rp .= '</tr>';
-            $rp .= '</tbody>';
-          }
-          $rp .= '</table>';
-          if($field->childrangchange) {
-            $rp .= '<script>ElementsAdd({ clone: "#clonar", contain: "#contenedorMore", plus: "#addMore", limit: 15, join: ".joinMore" }).init();</script>';
-          }
-          $rp .= '</div></div>';
+          $rp .= $field->render() . "\n";
         }
       }
 #      $rp .= '</div>';
@@ -555,49 +513,39 @@ class Formity {
   }
   function render() {
     $rp = '';
-    if(!empty(Theme::data('submenu'))) {
-      $rp .= '<div class="buttons has-addons is-right are-small" style="margin-bottom:0;">';
-      foreach(Theme::submenu() as $s) {
-        $rp .= '<a class="button is-success" ' . ($s['popy'] ? 'data-popy' : '') . ' href="' . $s['link'] . '">' . $s['nombre'] . '</a>';
-      }
-      $rp .= '</div>';
+    if(Route::requestByPopy()) {
+      $rp .= Route::renderNav();
     }
     if(!empty($this->title)) {
-      $rp .= '<h1 class="titular">' . $this->title . '</h1>';
+      $rp .= '<h2>' . $this->title . '</h2>';
     }
     if(!empty($this->description)) {
-      $rp .= '<small>' . $this->description . '</small>';
+      $rp .= '<p class="description">' . $this->description . '</p>';
     }
-    $rp .= Route::renderErrors();
+    #$rp .= Route::renderErrors();
     $rp .= '<div>';
     $rp .= static::_renderFormity($this);
     $rp .= '</div>';
     return $rp;
   }
   function renderInPage() {
-      require_once(ABS_PLANTILLAS . 'cabecera_cpanel.php');
-      echo '<div class="contenedor_generico contenedor_cuerpo_principal">';
-      if(!empty(Theme::data('submenu'))) {
-        echo '<div class="struct_site_body_menu2">';
-        echo '<ul class="inlineBlock nowrap no-full right">';
-        echo mostrar_menu(Theme::submenu(), null, true);
-        echo '</ul>';
-        echo '</div>';
-      }
-    //echo '<div class="cuerpo_principal">';
-    if(!empty($this->title)) {
-      echo '<h1 class="titular">' . $this->title . '</h1>';
+    $rp = Route::renderAssets();
+    $rp .= "<div class=\"card\">";
+    if(!is_null($this->title)) {
+      $rp .= "<div class=\"card-header\">";
+      $rp .= "<p class=\"card-header-title\">";
+      $rp .= $this->title;
+      $rp .= "</p>";
+      $rp .= "</div>";
     }
-    if(!empty($this->description)) {
-      echo '<small>' . $this->description . '</small>';
-    }
-    //echo mostrar_submenu($SUBMENU);
-    echo Route::renderErrors();
-    echo '<div class="card">';
-    echo static::_renderFormity($this);
-    echo '</div>';
-    echo '</div>';
-    require_once(ABS_PLANTILLAS . 'pie_cpanel.php');
+    $rp .= "<div class=\"card-body\">";
+    $rp .= "<div class=\"card-content\">";
+    $rp .= static::_renderFormity($this);
+    $rp .= '</div></div></div>';
+    $VISTA_HTML = $rp;
+    unset($rp);
+    require_once(VIEWS . 'internal.php');
+    exit;
   }
 }
 class FormityField {
@@ -613,6 +561,8 @@ class FormityField {
   public $type  = null;
   public $extra = null;
   public $size = 12;
+  private $icon = null;
+  private $regex = null;
   private $length_min = 0;
   private $length_step = '0.01';
   private $length_max = 100;
@@ -676,8 +626,8 @@ class FormityField {
 #      $this->childstruct->parentForm = $form;
       $type = 'form';
       $cr = $analyze;
-      Theme::JS('/libs/js/formity.add.js');
-      Theme::CSS('/libs/css/formity.add.css');
+      Route::addJS('/js/formity.add.js', 'formity.add');
+      Route::addCSS('/css/formity.add.css');
     } else {
       if(strpos($type, $div) === false) {
         $type .= $div;
@@ -697,23 +647,27 @@ class FormityField {
 #      $this->extra = 'autocomplete';
 
     } elseif($this->extra == 'autocomplete') {
-      Theme::JS('/libs/js/jquery-ui.min.js');
-      Theme::CSS('/libs/css/jquery-ui.min.css');
+      Route::addJS('/js/jquery-ui.min.js', 'jquery-ui');
+      Route::addCSS('/css/jquery-ui.min.css');
 
     } elseif($this->type == 'panel') {
-      Theme::JS('/libs/js/formity.panel.js');
+      Route::addJS('/js/formity.panel.js', 'formity.panel');
 
     } elseif($this->type == 'tree') {
-      Theme::JS('/libs/js/formity.tree.js');
-      Theme::CSS('/libs/css/formity.tree.css');
+      Route::addJS('/js/formity.tree.js', 'formity.tree');
+      Route::addCSS('/css/formity.tree.css');
       require_once(ABS_LIBRERIAS . 'formity.tree.php');
 
     } elseif($this->type == 'word') {
-      Theme::JS('/libs/js/trumbowyg.min.js');
-      Theme::JS('/libs/js/trumbowyg.table.js');
-      #Theme::JS('/libs/js/trumbowyg.pasteembed.js');
-      Theme::CSS('/libs/css/trumbowyg.min.css');
-      Theme::CSS('/libs/css/trumbowyg.table.css');
+      Route::addJS('/js/trumbowyg.min.js');
+      Route::addJS('/js/trumbowyg.table.js');
+      #Route::JS('/js/trumbowyg.pasteembed.js');
+      Route::addCSS('/css/trumbowyg.min.css');
+      Route::addCSS('/css/trumbowyg.table.css');
+
+    } elseif($this->type == 'textarea' && $this->extra == 'tags') {
+      Route::addJS('/js/jquery.tagsinput.js');
+      Route::addCSS('/css/jquery.tagsinput.css');
     }
 
     if(!empty($cr)) {
@@ -721,19 +675,27 @@ class FormityField {
         $cr = $cr . '-' . $cr . ':' . $cr;
         $this->childrangchange = false;
       } else {
-        Theme::JS('/libs/js/elements.add.js');
+        Route::addJS('/js/formity.add.js', 'formity.add');
       }
       $pcr = explode(':', $cr);
       $this->childrang = $pcr[0];
-      if(!empty($pcr[1])) {
-        $this->declareChildren($pcr[1]);
-      }
+      $rang = explode('-', $pcr[0]);
+      $this->length_min = $rang[0];
+      $this->length_max = $rang[1];
+      $this->declareChildren(!empty($pcr[1]) ? $pcr[1] : $rang[0]);
     }
     if(in_array($extra, array('file','files'))) {
       $form->file = true;
     }
     $this->index = count($form->fields) + 1;
     return $this;
+  }
+  function setIcon($x) {
+    $this->icon = $x;
+    return $this;
+  }
+  function getIcon() {
+    return $this->icon;
   }
   function setDepend($f) {
     if($f instanceof FormityField) {
@@ -746,17 +708,11 @@ class FormityField {
     return $this;
   }
   function getNameRequest() {
-    return Formity::hash($this->mform->id . $this->key);
-    return  $this->mform->id . $this->key;
-    $ce = $this;
-    $nivel = 0;
-#    echo "=============\n"; 
-    $cc = function($f) use ($ce, &$cc, &$nivel) {
-      $nivel++;
-#      echo "=>" . $f->id . "<=\n";
-      return trim((!is_null($f->parentForm) ? $cc($f->parentForm)  : '') . '.' . $f->number_child, '.');
-    };
-    return $this->mform->id . '.' . $cc($this->mform) . '.' . $this->key . '-' . $nivel;
+    if(!$this->mform->obfuscate) {
+      return $this->key;
+    } else {
+      return Formity::hash($this->mform->id . $this->key);
+    }
   }
   function declareChildren($cantidad, &$error = '') {
     $ce = $this;
@@ -779,18 +735,47 @@ class FormityField {
     $this->size = $n;
     return $this;
   }
+  function setRegex($r) {
+    $this->regex = $r;
+    return $this;
+  }
   function setStep($n) {
     $this->length_step = $n;
     return $this;
   }
   function setMin($n) {
     $this->length_min = $n;
+    if($this->mform->is_ajax) {
+      $this->mform->ajax_response[] = "formity_set_min('" . $this->getNameRequest() . "', " . $n . ");";
+    }
     return $this;
   }
   function setMax($n) {
     $this->length_max = $n;
+    if($this->mform->is_ajax) {
+      $this->mform->ajax_response[] = "formity_set_max('" . $this->getNameRequest() . "', " . $n . ");";
+    }
     return $this;
   }
+
+  function setLength($n){
+    $this->setMin($n);
+    $this->setMax($n);
+  }
+
+  function setSizeLength($n){
+    $k=$n-1;
+    $min = 10**($k);
+    $max = 0;
+    for ($i = 0 ; $i <= $k  ; $i++) {
+       $m = 10**$i;
+       $max +=$m;
+    }
+    $max = 9*$max;
+    $this->setMin($min);
+    $this->setMax($max);
+  }
+  
   function getMin() {
     return $this->length_min;
   }
@@ -805,6 +790,13 @@ class FormityField {
     $this->seteo = false;
     $this->value = null;
   }
+
+  function setTextLabel($value) {
+    if($this->mform->is_ajax) {
+        $this->mform->ajax_response[] = "formity_setTextLabel('" . $this->getNameRequest() . "', '" . $value . "');";
+    } 
+  }
+
   function setValue($value, $force = false, $main_form = null) {
     $main_form = !is_null($main_form) ? $main_form : $this->mform;
     /*if(!empty($_GET['_ft']) && $_GET['_ft'] == $this->getNameRequest()) {
@@ -843,9 +835,10 @@ class FormityField {
       }
       return $this;
     }
-    if(is_callable($value)) {
+    if(is_callable($value) && !is_string($value)) {
       $value = $value($this->mform, $this);
     }
+
     $value = is_array($value) ? $value : trim($value);
     if(is_null($value) || $value == '' ||  (is_array($value) && count($value) == 0)) {
       $value = null;
@@ -887,7 +880,7 @@ class FormityField {
       if($this->type == 'tree') {
         if(in_array($_POST['_mtree'], array('ls','top','bottom'))) {
           if(!is_numeric($_POST['_mnivel'])) {
-            _404();
+            _404('no-es-numeric2');
           }
           $id = !empty($_POST['_mid']) ? $_POST['_mid'] : null;
           return_json($options($this->mform, $this, $_POST['_mtree'], $_POST['_mnivel'], $id));
@@ -951,7 +944,7 @@ class FormityField {
       return false;
     }
     if(!empty($_GET['_fp']) && $_GET['_fp'] == $this->getNameRequest()) {
-      Theme::data('submenu', null);
+      Route::data('submenu', null);
       $cb($_GET['_fpi']);
       exit;
     }
@@ -977,13 +970,13 @@ class FormityField {
     }
     if(!empty($_GET['_ft']) && $_GET['_ft'] == $this->getNameRequest()) {
       if(!is_callable($options)) {
- //       _404('setOptions de ' . $this->key . ' debe ser callback');
+        #_404('setOptions de ' . $this->key . ' debe ser callback');
       }
       if($this->mform->byRequest('POST') && $this->type == 'tree') {
         if(isset($_POST['_mtree'])) {
           if(in_array($_POST['_mtree'], array('ls','top','bottom'))) {
             if(!is_numeric($_POST['_mnivel'])) {
-              _404();
+              _404('no-es-numeric');
             }
             $id = !empty($_POST['_mid']) ? $_POST['_mid'] : null;
             return_json($options($this->mform, $this, $_POST['_mtree'], $_POST['_mnivel'], $id));
@@ -1034,7 +1027,10 @@ class FormityField {
     }
     return $this;
   }
-  function disabled($t = true) {
+  function disabled($t = -1) {
+    if($t === -1) {
+      return $this->disabled;
+    }
     $this->disabled = !!$t;
     if($this->mform->is_ajax) {
       $this->mform->ajax_response[] = "formity_set_disabled('" . $this->getNameRequest() . "', " . (!!$t ? 1 : 0) . ");";
@@ -1109,6 +1105,11 @@ class FormityField {
       if(!is_null($value) && $value != '') {
         if(strlen($value) > $this->length_max) {
           $this->error[] = 'Se ha excedido el límite de caracteres (' . strlen($value) . '/' . $this->length_max . ') ingresados en ' . $this->name;
+        }
+        if(!is_null($this->regex)) {
+          if(!preg_match("/^" . $this->regex . "$/", $value)) {
+            $this->error[] = 'El campo ' . $this->name . ' no cumple el formato requerido';
+          }
         }
       }
       if(!empty($this->required) || (empty($this->required) && (!is_null($value) || $value != ''))) {
@@ -1225,7 +1226,6 @@ class FormityField {
     }
     $extra = $this->extra;
 
-    
     if($this->extra == 'autocomplete') {
       $extra = 'text';
       if($this->type == 'input') {
@@ -1234,8 +1234,8 @@ class FormityField {
       } else {
         $h .= '<textarea name="' . $keyw . '" id="ip_' . $this->getNameRequest() . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '">' . htmlentities($this->value) . '</textarea>';
       }
-      $h .= "<script> $(function() { $('#ip_" . $this->getNameRequest() . "').autocomplete({ source: function (request, response) { \n";
-      $h .= "$.ajax({ type: \"POST\", url: \"" . Route::link(null, null, null, 'aip=' . $this->getNameRequest()) . "&term=\" + request.term,";
+      $h .= "<script> requireJS('jquery-ui', function() { $('#ip_" . $this->getNameRequest() . "').autocomplete({ source: function (request, response) { \n";
+      $h .= "$.ajax({ type: \"POST\", url: \"" . Route::uri(null, null, null, 'aip=' . $this->getNameRequest()) . "&term=\" + request.term,";
       $h .= "data: new FormData($(\"[data-id='" . $this->mform->id . "']\")[0]), contentType: false, processData: false, success: response, dataType: 'json' }); }, minLength: 2, ";
       $h .= "select: function( event, ui ) {\n";
       $h .= "event.preventDefault();\n";
@@ -1267,6 +1267,9 @@ class FormityField {
       } elseif($extra == 'range') {
         $attrs .= " oninput=\"$('#val_" . $this->getNameRequest() . "').text(fmt_duration(this.value));\"";
       }
+      if($this->regex !== null) {
+        $attrs .= " pattern=\"" . $this->regex . "\"";
+      }
 
       $h .= '<input type="' . $extra . '" name="' . $keyw . '" id="ip_' . $this->getNameRequest() . '" value="' . htmlentities($this->value) . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '" />';
       if($extra == 'range') {
@@ -1281,7 +1284,14 @@ class FormityField {
       }
 
     } elseif($this->type == 'textarea') {
-      $h .= '<textarea name="' . $keyw . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '">' . htmlentities($this->value) . '</textarea>';
+      $h .= '<textarea id="tags_' . $keyw . '" name="' . $keyw . '" ' . $attrs . ' data-name="' . $this->name . '" placeholder="' . $this->name . '">' . htmlentities($this->value) . '</textarea>';
+      if($this->extra == 'tags') {
+        $h .= '<script>';
+        $h .= '$(function() { ';
+        $h .= '$("#tags_' . $keyw . '").tagsInput({width:\'auto\',  \'onAddTag\': function(input, value) { console.log(\'tag added\'); $("#tags_' . $keyw . '").change(); } });';
+        $h .= ' })';
+        $h .= '</script>';
+      }
 
     } elseif($this->type == 'word') {
       $h .= '<div>';
@@ -1302,7 +1312,7 @@ class FormityField {
             }
           }
         $h .= '</p>';
-        $h .= '<div class="panel-pages">';
+        $h .= '<div id="ft_panel_' . $keyw . '" class="panel-pages">';
           $h .= '<div class="content-tab library-selected" id="tab01">';
           $h .= '</div>';
           if(!empty($this->options)) { $j = 1;
@@ -1310,7 +1320,7 @@ class FormityField {
               $h .= '<div class="content-tab library" id="tab0' . $j . '" style="display:none;">';
               if(!empty($o)) {
                 foreach($o as $v) {
-                  $linkOp = Route::link(null, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, '_fp=' . $this->getNameRequest() . '&_fpi=' . $v['id']);
+                  $linkOp = Route::uri(null, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, '_fp=' . $this->getNameRequest() . '&_fpi=' . $v['id']);
                   $s = is_null($this->value) ? '' : (!in_array($v['id'], (array) $this->value) ? '' : ' checked="checked"');
                   $h .= '<label class="panel-block" data-return="tab0' . $j . '">';
                     $h .= '<div class="columns" style="width: 100%;">';
@@ -1340,6 +1350,19 @@ class FormityField {
           $h .= '<button type="button" class="button is-link is-outlined is-fullwidth" onclick="javascript:$(\'.panel-pages input:checkbox\').prop(\'checked\', false);actualizar_seleccionados();">Desmarcar todo</button>';
         $h .= '</div>';
       $h .= '</nav>';
+
+      $h .= <<<EOF
+<script>
+requireJS('formity.panel', function() {
+  $('#ft_panel_{$keyw}').on('click', ft_panel_refresh);
+  $('#ft_panel_{$keyw}').on('click', '.buttons', function(e) {
+    e.preventDefault();
+  });
+  ft_panel_refresh();
+});
+</script>
+EOF;
+
 
     } elseif($this->type == 'select') {
       $h .= '<div class="select is-fullwidth">';
@@ -1392,7 +1415,7 @@ class FormityField {
       if(!is_null($this->length_max)) {
         $extra .= 'max: ' . $this->length_max . ',';
       }
-      $linkOp = Route::link(null, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, '_ft=' . $this->getNameRequest());
+      $linkOp = Route::uri(null, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, '_ft=' . $this->getNameRequest());
       $h .= <<<EOF
         <script> FormityTree($("#{$u}"), {url: '{$linkOp}', value: 'val_{$u}', {$extra} }).init(); </script>
 EOF;
@@ -1406,10 +1429,73 @@ EOF;
       $h .= '<div data-name="' . $this->name . '" ' . $attrs . '>' . $this->value . '</div>';
 
     } elseif($this->type == 'form') {
-      $h .= '<i>FORM</i>';
+###############################
+          $keid = '';#uniqid();
+          $h .= '<table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth" id="contenedorMore_' . $keid . $this->getNameRequest() . '" data-id="' . $this->getNameRequest() . '">';
+          if(!empty($this->getChildren())) { foreach($this->getChildren() as $k => $f) {
+            $h .= '<tbody class="joinMore_' . $keid . $this->getNameRequest() . '">';
+            $h .= '<tr>';
+            $h .= '<th rowspan="2" class="indice has-text-centered">';
+            $h .= '<span class="key">' . ($k + 1) . '</span>';
+            foreach($f->getFields() as $_k => $_f) {
+              if(!$_f->isForm() && $_f->extra == 'hidden') {
+                $h .= "<div style='display:none;'>" . $_f->render() . "</div>";
+              }
+            }
+            $h .= '</th>';
+            foreach($f->getFields() as $_k => $_f) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
+                $h .= "<th>" . $_f->name . "</th>";
+              }
+            }
+            $h .= '</tr>';
+            $h .= '<tr>';
+            foreach($f->getFields() as $_k => $_f) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
+                $h .= "<td>" . $_f->render() . "</td>";
+              }
+            }
+            $h .= '</tr>';
+            $h .= '</tbody>';
+          } }
+          if($this->childrangchange) {
+            $h .= '<tbody class="hide" id="clonar_' . $keid . $this->getNameRequest() . '">';
+            $h .= '<tr>';
+            $h .= '<th rowspan="2" class="indice has-text-centered">';
+            $h .= '<span class="key">#</span>';
+            foreach($this->childstruct->getFields() as $_k => $_f) {
+              if(!$_f->isForm() && $_f->extra == 'hidden') {
+                $h .= "<div style='display:none;'>" . $_f->render() . "</div>";
+              }
+            }
+            $h .= '</th>';
+            foreach($this->childstruct->getFields() as $_k => $_f) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
+                $h .= "<th>" . $_f->name . "</th>";
+              }
+            }
+            $h .= '</tr>';
+            $h .= '<tr>';
+            foreach($this->childstruct->getFields() as $_k => $_f) {
+              if(!$_f->isForm() && $_f->extra != 'hidden') {
+                $h .= "<td>" . $_f->render() . "</td>";
+              }
+            }
+            $h .= '</tr>';
+            $h .= '</tbody>';
+          }
+          $h .= '</table>';
+          if($this->childrangchange) {
+            $h .= '<script>requireJS(\'formity.add\', function() { ElementsAdd({ clone: "#clonar_' . $keid . $this->getNameRequest() . '", contain: "#contenedorMore_' . $keid . $this->getNameRequest() . '", plus: "#addMore_' . $keid . $this->getNameRequest() . '", min: ' . $this->length_min . ',max: ' . $this->length_max . ', join: ".joinMore_' . $this->getNameRequest() . '" }).init(); });</script>';
+          }
+
+###############################
 
     } else {
       $h .= '<!-- Error: ' . $this->type . ':' . $this->extra . ':' . $extra . ' -->';
+    }
+    if(!is_null($this->icon)) {
+      $h .= '<div class="input-icon"><i data-feather="' . $this->icon . '"></i></div>';
     }
     $h .= '<p class="help is-danger" data-fnn-message>' . implode(',', $this->error) . '</p>';
     return $h;
